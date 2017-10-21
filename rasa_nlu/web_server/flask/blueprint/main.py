@@ -34,11 +34,11 @@ def check_cors(f):
             resp.headers['Access-Control-Allow-Origin'] = '*'
 
             if '*' in server.config['cors_origins']:
-                request.headers['Access-Control-Allow-Origin'] = '*'
+                resp.headers['Access-Control-Allow-Origin'] = '*'
             elif origin in server.config['cors_origins']:
-                request.headers['Access-Control-Allow-Origin'] = origin
+                resp.headers['Access-Control-Allow-Origin'] = origin
             else:
-                request.status_code = 403
+                resp.status_code = 403
                 return resp
 
         return f(*args, **kwargs)
@@ -57,8 +57,11 @@ def requires_auth(f):
 
         if server.data_router.token is None or token == server.data_router.token:
             return f(*args, **kwargs)
-        request.status_code = 401
-        return 'unauthorized'
+
+        resp = Response("unauthorized")
+        resp.status_code = 401
+
+        return resp
 
     return decorated
 
@@ -164,7 +167,7 @@ def train():
     resp.headers['Content-Type'] = 'application/json'
 
     try:
-        request.setResponseCode(200)
+        request.status_code = 200
         response = server.data_router.start_train_process(
             data_string, kwargs)
         resp.response = simplejson.dumps(
