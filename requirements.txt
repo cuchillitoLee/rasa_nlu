@@ -1,3 +1,2 @@
-flask==0.12.2
 -e .
 -r alt_requirements/requirements_bare.txt
