@@ -69,7 +69,6 @@ def requires_auth(f):
 @api_app.route("/", methods=['GET'])
 @check_cors
 def hello():
-    print("hello")
     """Main Rasa route to check if the server is online"""
     return "hello from Rasa NLU: " + __version__
 
