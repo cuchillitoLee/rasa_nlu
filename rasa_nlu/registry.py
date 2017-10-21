@@ -8,6 +8,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+import os
 import typing
 from rasa_nlu import utils
 from typing import Any
@@ -147,6 +148,12 @@ def load_component_by_name(component_name,  # type: Text
     previously persisted model."""
 
     component_clz = get_component_class(component_name)
+
+    # Fix path change issue during copy model from one to other
+    mitie_file = metadata.get("mitie_file")
+    if mitie_file and not os.path.isabs(mitie_file):
+        metadata.metadata["mitie_file"] = os.path.join(model_dir, mitie_file)
+
     return component_clz.load(model_dir, metadata, cached_component, **kwargs)
 
 
