@@ -44,6 +44,7 @@ setup(
         'rasa_nlu.extractors',
         'rasa_nlu.featurizers',
         'rasa_nlu.tokenizers',
+        'rasa_nlu.web_server'
     ],
     classifiers=[
         "Programming Language :: Python :: 2.7",
