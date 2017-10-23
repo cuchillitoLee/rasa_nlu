@@ -58,9 +58,10 @@ class TrainingException(Exception):
         self.failed_target_project = failed_target_project
         if exception:
             self.message = exception.args[0]
+            self.raw_exception = exception
 
     def __str__(self):
-        return self.message
+        return str(self.message)
 
 
 def create_persistor(config):

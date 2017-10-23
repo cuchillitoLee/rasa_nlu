@@ -51,7 +51,7 @@ def deferred_from_future(future, callback, errback):
     """Converts a concurrent.futures.Future object to a twisted.internet.defer.Deferred obejct.
     See: https://twistedmatrix.com/pipermail/twisted-python/2011-January/023296.html
     """
-    def callback(future):
+    def callback_func(future):
         e = future.exception()
         if e:
             if DEFERRED_RUN_IN_REACTOR_THREAD:
@@ -64,7 +64,7 @@ def deferred_from_future(future, callback, errback):
             else:
                 callback(future.result())
 
-    future.add_done_callback(callback)
+    future.add_done_callback(callback_func)
     return future.result()
 
 

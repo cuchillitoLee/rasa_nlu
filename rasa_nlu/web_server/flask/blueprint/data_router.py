@@ -206,14 +206,14 @@ class DataRouter(object):
             return model_dir
 
         def training_errback(failure):
-            target_project = self.project_store.get(failure.value.failed_target_project)
+            target_project = self.project_store.get(failure.failed_target_project)
             if target_project:
                 target_project.status = 0
             return failure
 
         logger.debug("New training queued")
 
-        result = self.pool.submit(do_train_in_worker, train_config)
-        result = deferred_from_future(result, training_callback, training_errback)
+        future = self.pool.submit(do_train_in_worker, train_config)
+        result = deferred_from_future(future, training_callback, training_errback)
 
         return result

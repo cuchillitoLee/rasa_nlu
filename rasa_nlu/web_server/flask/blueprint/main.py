@@ -157,6 +157,7 @@ def status():
 @requires_auth
 @check_cors
 def train():
+    # FIXME: this function not work under zeus_core but work under plain flask
     data_string = request.data.decode('utf-8', 'strict')
     kwargs = {key: value for key, value in request.args.items()}
 
@@ -166,22 +167,23 @@ def train():
     resp.headers['Content-Type'] = 'application/json'
 
     try:
-        request.status_code = 200
+        resp.status_code = 200
         response = server.data_router.start_train_process(
             data_string, kwargs)
-        resp.response = simplejson.dumps(
+        resp.data = simplejson.dumps(
             {'info': 'new model trained: {}'.format(response)})
         return resp
     except AlreadyTrainingError as e:
-        request.status_code = 403
-        resp.response = simplejson.dumps({"error": "{}".format(e)})
+        resp.status_code = 403
+        resp.data = simplejson.dumps({"error": "{}".format(e)})
         return resp
     except InvalidProjectError as e:
-        request.status_code = 404
-        resp.response = simplejson.dumps({"error": "{}".format(e)})
+        resp.status_code = 404
+        resp.data = simplejson.dumps({"error": "{}".format(e)})
         return resp
     except TrainingException as e:
-        request.status_code = 500
-        resp.response = simplejson.dumps(
+        logger.exception(e.raw_exception)
+        resp.status_code = 500
+        resp.data = simplejson.dumps(
             {"error": "{}".format(e)})
         return resp
