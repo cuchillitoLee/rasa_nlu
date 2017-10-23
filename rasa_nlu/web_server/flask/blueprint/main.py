@@ -14,6 +14,7 @@ from rasa_nlu.flask_data_router import InvalidProjectError, \
     AlreadyTrainingError
 from rasa_nlu.train import TrainingException
 from rasa_nlu.version import __version__
+from rasa_nlu.web_server import functions
 
 logger = logging.getLogger(__name__)
 
@@ -94,15 +95,13 @@ def parse_get():
         return dumped
     else:
         server = current_app.config['rasa_nlu_server_config']
-        data = server.data_router.extract(request_params)
 
         resp = Response()
         resp.headers['Access-Control-Allow-Origin'] = '*'
 
         try:
             resp.status_code = 200
-            response_data = server.data_router.parse(
-                data) if server._testing else server.data_router.parse(data)
+            response_data = functions.parse(server, request_params)
             resp.response = simplejson.dumps(response_data)
             return resp
         except InvalidProjectError as e:
