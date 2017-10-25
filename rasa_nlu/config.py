@@ -63,7 +63,7 @@ class InvalidConfigError(ValueError):
 class RasaNLUConfig(object):
     DEFAULT_PROJECT_NAME = "default"
 
-    def __init__(self, filename=None, env_vars=None, cmdline_args=None):
+    def __init__(self, filename=None, env_vars=None, cmdline_args=None, dict_config=None):
 
         if filename is None and os.path.isfile(DEFAULT_CONFIG_LOCATION):
             filename = DEFAULT_CONFIG_LOCATION
@@ -84,6 +84,10 @@ class RasaNLUConfig(object):
         if cmdline_args is not None:
             cmdline_config = self.create_cmdline_config(cmdline_args)
             self.override(cmdline_config)
+
+        # Add support to dynamic config
+        if dict_config is not None:
+            self.override(dict_config)
 
         if isinstance(self.__dict__['pipeline'], six.string_types):
             from rasa_nlu import registry
