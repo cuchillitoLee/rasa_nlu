@@ -10,7 +10,7 @@ from functools import wraps
 import simplejson
 from flask import Response, Blueprint, request, current_app
 
-from rasa_nlu.flask_data_router import InvalidProjectError, \
+from rasa_nlu.web_server.flask.blueprint.data_router import InvalidProjectError, \
     AlreadyTrainingError
 from rasa_nlu.train import TrainingException
 from rasa_nlu.version import __version__
