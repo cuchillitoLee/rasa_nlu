@@ -51,20 +51,14 @@ def deferred_from_future(future, callback, errback):
     """Converts a concurrent.futures.Future object to a twisted.internet.defer.Deferred obejct.
     See: https://twistedmatrix.com/pipermail/twisted-python/2011-January/023296.html
     """
-    def callback(future):
+    def callback_func(future):
         e = future.exception()
         if e:
-            if DEFERRED_RUN_IN_REACTOR_THREAD:
-                errback(e)
-            else:
-                errback(e)
+            errback(e)
         else:
-            if DEFERRED_RUN_IN_REACTOR_THREAD:
-                callback(future.result())
-            else:
-                callback(future.result())
+            callback(future.result())
 
-    future.add_done_callback(callback)
+    future.add_done_callback(callback_func)
     return future.result()
 
 
@@ -212,14 +206,14 @@ class DataRouter(object):
             return model_dir
 
         def training_errback(failure):
-            target_project = self.project_store.get(failure.value.failed_target_project)
+            target_project = self.project_store.get(failure.failed_target_project)
             if target_project:
                 target_project.status = 0
             return failure
 
         logger.debug("New training queued")
 
-        result = self.pool.submit(do_train_in_worker, train_config)
-        result = deferred_from_future(result, training_callback, training_errback)
+        future = self.pool.submit(do_train_in_worker, train_config)
+        result = deferred_from_future(future, training_callback, training_errback)
 
         return result

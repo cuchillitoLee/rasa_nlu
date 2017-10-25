@@ -35,11 +35,11 @@ def check_cors(f):
             resp.headers['Access-Control-Allow-Origin'] = '*'
 
             if '*' in server.config['cors_origins']:
-                request.headers['Access-Control-Allow-Origin'] = '*'
+                resp.headers['Access-Control-Allow-Origin'] = '*'
             elif origin in server.config['cors_origins']:
-                request.headers['Access-Control-Allow-Origin'] = origin
+                resp.headers['Access-Control-Allow-Origin'] = origin
             else:
-                request.status_code = 403
+                resp.status_code = 403
                 return resp
 
         return f(*args, **kwargs)
@@ -58,8 +58,11 @@ def requires_auth(f):
 
         if server.data_router.token is None or token == server.data_router.token:
             return f(*args, **kwargs)
-        request.status_code = 401
-        return 'unauthorized'
+
+        resp = Response("unauthorized")
+        resp.status_code = 401
+
+        return resp
 
     return decorated
 
@@ -67,7 +70,6 @@ def requires_auth(f):
 @api_app.route("/", methods=['GET'])
 @check_cors
 def hello():
-    print("hello")
     """Main Rasa route to check if the server is online"""
     return "hello from Rasa NLU: " + __version__
 
@@ -99,7 +101,8 @@ def parse_get():
 
         try:
             resp.status_code = 200
-            response_data = functions.parse(server, request_params)
+            response_data = server.data_router.parse(
+                data) if server._testing else server.data_router.parse(data)
             resp.response = simplejson.dumps(response_data)
             return resp
         except InvalidProjectError as e:
@@ -163,22 +166,23 @@ def train():
     resp.headers['Content-Type'] = 'application/json'
 
     try:
-        request.setResponseCode(200)
+        resp.status_code = 200
         response = server.data_router.start_train_process(
             data_string, kwargs)
-        resp.response = simplejson.dumps(
+        resp.data = simplejson.dumps(
             {'info': 'new model trained: {}'.format(response)})
         return resp
     except AlreadyTrainingError as e:
-        request.status_code = 403
-        resp.response = simplejson.dumps({"error": "{}".format(e)})
+        resp.status_code = 403
+        resp.data = simplejson.dumps({"error": "{}".format(e)})
         return resp
     except InvalidProjectError as e:
-        request.status_code = 404
-        resp.response = simplejson.dumps({"error": "{}".format(e)})
+        resp.status_code = 404
+        resp.data = simplejson.dumps({"error": "{}".format(e)})
         return resp
     except TrainingException as e:
-        request.status_code = 500
-        resp.response = simplejson.dumps(
+        logger.exception(e.raw_exception)
+        resp.status_code = 500
+        resp.data = simplejson.dumps(
             {"error": "{}".format(e)})
         return resp
