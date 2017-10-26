@@ -139,8 +139,8 @@ class DataRouter(object):
             from rasa_nlu.emulators.luis import LUISEmulator
             return LUISEmulator()
         elif mode.lower() == 'api':
-            from rasa_nlu.emulators.api import ApiEmulator
-            return ApiEmulator()
+            from rasa_nlu.emulators.dialogflow import DialogflowEmulator
+            return DialogflowEmulator()
         else:
             raise ValueError("unknown mode : {0}".format(mode))
 
@@ -164,7 +164,7 @@ class DataRouter(object):
         response, used_model = self.project_store[project].parse(data['text'], data.get('time', None), model)
 
         if self.responses:
-            self.responses.info(user_input=response, project=project, model=used_model)
+            self.responses.info('',user_input=response, project=project, model=used_model)
         return self.format_response(response)
 
     def format_response(self, data):
