@@ -4,6 +4,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import os
+import shutil
 
 import typing
 from builtins import str
@@ -77,7 +78,11 @@ class MitieNLP(Component):
     def persist(self, model_dir):
         # type: (Text) -> Dict[Text, Any]
 
+        # copy mitie data file to model dir
+        std_mitie_file = "total_word_feature_extractor.dat"
+        shutil.copyfile(self.mitie_file, os.path.join(model_dir, std_mitie_file))
+
         return {
             "mitie_feature_extractor_fingerprint": self.extractor.fingerprint,
-            "mitie_file": self.mitie_file
+            "mitie_file": std_mitie_file
         }
