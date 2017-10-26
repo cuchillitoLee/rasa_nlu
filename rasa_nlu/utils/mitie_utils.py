@@ -72,7 +72,9 @@ class MitieNLP(Component):
         if cached_component:
             return cached_component
 
-        mitie_file = model_metadata.get("mitie_file")
+        # load mitie_file from model_dir
+        mitie_file = os.path.join(model_dir, model_metadata.get("mitie_file"))
+
         return MitieNLP(mitie_file, mitie.total_word_feature_extractor(mitie_file))
 
     def persist(self, model_dir):
