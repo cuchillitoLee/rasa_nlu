@@ -195,6 +195,7 @@ class Trainer(object):
             if update:
                 metadata.update(update)
 
+        # TODO: move to persist() method of MITIE component
         # copy mitie file to model dir
         mitie_file = self.config.get('mitie_file')
         if mitie_file and os.path.isfile(mitie_file):
