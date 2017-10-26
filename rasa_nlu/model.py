@@ -10,8 +10,6 @@ import logging
 import os
 
 import copy
-import shutil
-
 from builtins import object
 from builtins import str
 from typing import Any
@@ -194,17 +192,6 @@ class Trainer(object):
             update = component.persist(dir_name)
             if update:
                 metadata.update(update)
-
-        # TODO: move to persist() method of MITIE component
-        # copy mitie file to model dir
-        mitie_file = self.config.get('mitie_file')
-        if mitie_file and os.path.isfile(mitie_file):
-            in_dir_file_name = os.path.basename(mitie_file)
-            shutil.copyfile(
-                mitie_file,
-                os.path.join(dir_name, in_dir_file_name)
-            )
-            metadata['mitie_file'] = in_dir_file_name
 
         Metadata(metadata, dir_name).persist(dir_name)
 
