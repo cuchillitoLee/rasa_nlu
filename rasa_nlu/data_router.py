@@ -114,7 +114,8 @@ class DataRouter(object):
         projects = []
 
         if os.path.isdir(self.config['path']):
-            projects = os.listdir(self.config['path'])
+            # TODO: start a pull request
+            projects = [i for i in os.listdir(self.config['path']) if os.path.isdir(os.path.join(self.config['path'], i))]
 
         project_store = {}
 
