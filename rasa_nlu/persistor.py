@@ -34,6 +34,8 @@ def get_persistor(config):
                             config['aws_endpoint_url'])
     elif config['storage'] == 'gcs':
         return GCSPersistor(config['bucket_name'])
+    elif config['storage'] == 's3':
+        return S3Persistor(config['s3_master'], config['s3_slave'])
     else:
         return None
 
@@ -253,3 +255,72 @@ class GCSPersistor(Persistor):
 
         blob = self.bucket.blob(target_filename)
         blob.download_to_filename(target_filename)
+
+
+class S3Persistor(Persistor):
+    """Store models on S3.
+
+    Fetches them when needed, instead of storing them on the local disk."""
+
+    def __init__(self, master, slaves):
+        # type: (dict, List(dict)) -> None
+
+        super(S3Persistor, self).__init__()
+
+        # monkey-patched AWSPersistor
+        setattr(AWSPersistor, 'rollback', self._rollback)
+
+        self.master_node = AWSPersistor(**master)
+        self.salve_nodes = [AWSPersistor(**i) for i in slaves]
+
+    def list_models(self, project):
+        # type: (Text) -> List[Text]
+        return self.master_node.list_models(project)
+
+    def list_projects(self):
+        # type: (Text) -> List[Text]
+        return self.master_node.list_projects()
+
+    def persist(self, *args, **kwargs):
+        persisted_nodes = []
+        try:
+            self.master_node.persist(*args, **kwargs)
+            persisted_nodes.append(self.master_node)
+
+            for node in self.salve_nodes:
+                node.persist(*args, **kwargs)
+                persisted_nodes.append(self.master_node)
+        except Exception as e:
+            # something wrong, rollback all the operation
+            try:
+                for node in persisted_nodes:
+                    node.rollback(*args, **kwargs)
+                raise e
+            except Exception as e:
+                raise e
+
+    @staticmethod
+    def _rollback(self, mode_directory, model_name, project):
+        if not os.path.isdir(mode_directory):
+            raise ValueError("Target directory '{}' not found.".format(mode_directory))
+
+        file_key, _ = self._compress(mode_directory, model_name, project, dry_run=True)
+
+        # remove local model
+        shutil.rmtree(mode_directory, ignore_errors=True)
+
+        # remove remote model
+        self.s3.Object(self.bucket_name, file_key).delete()
+
+    @staticmethod
+    def _compress(self, model_directory, model_name, project, dry_run=0):
+        # type: (Text) -> Tuple[Text, Text]
+        """Creates a compressed archive and returns key and tar."""
+
+        base_name = self._tar_name(model_name, project, include_extension=False)
+        tar_name = shutil.make_archive(base_name, 'gztar',
+                                       root_dir=model_directory,
+                                       base_dir=".",
+                                       dry_run=dry_run)
+        file_key = os.path.basename(tar_name)
+        return file_key, tar_name
