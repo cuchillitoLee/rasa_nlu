@@ -70,7 +70,8 @@ class Persistor(object):
         raise NotImplementedError
 
     def list_projects(self):
-        # type: (Text) -> List[Text]
+        # type: () -> List[Text]
+        """Lists all projects."""
 
         raise NotImplementedError
 
@@ -159,7 +160,7 @@ class AWSPersistor(Persistor):
             return []
 
     def list_projects(self):
-        # type: (Text) -> List[Text]
+        # type: () -> List[Text]
         try:
             projects_set = {self._project_and_model_from_filename(obj.key)[0]
                             for obj in self.bucket.objects.filter()}
@@ -221,7 +222,7 @@ class GCSPersistor(Persistor):
             return []
 
     def list_projects(self):
-        # type: (Text) -> List[Text]
+        # type: () -> List[Text]
 
         try:
             blob_iterator = self.bucket.list_blobs()

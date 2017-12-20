@@ -11,3 +11,4 @@ tqdm==4.11.2
 numpy==1.13.1
 simplejson==3.11.1
 flask
+mock==2.0.0
