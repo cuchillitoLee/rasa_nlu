@@ -13,7 +13,7 @@ from builtins import object
 from typing import Text, Dict, Any
 from future.utils import PY3
 
-from concurrent.futures import ProcessPoolExecutor as ProcessPool
+from concurrent.futures import ThreadPoolExecutor as ThreadPool
 from twisted.logger import jsonFileLogObserver, Logger
 
 from rasa_nlu import utils
@@ -74,7 +74,7 @@ class DataRouter(object):
         self.emulator = self._create_emulator()
         self.component_builder = component_builder if component_builder else ComponentBuilder(use_cache=True)
         self.project_store = self._create_project_store()
-        self.pool = ProcessPool(self._training_processes)
+        self.pool = ThreadPool(self._training_processes)
 
     def __del__(self):
         """Terminates workers pool processes"""
