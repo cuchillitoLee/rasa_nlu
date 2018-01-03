@@ -56,16 +56,41 @@ class Project(object):
             self._writer_lock.release()
         self._reader_lock.release()
 
-    def parse(self, text, time=None, model_name=None):
+    def _dynamic_load_model(self, requested_model_name=None):
+        # type: (Text) -> Text
+        if requested_model_name is None:  # user want latest model
+            # NOTE: for better parse performance, currently although user may want
+            # latest model by set requested_model_name explicitly to None, we are
+            # not refresh model list from local and cloud which is pretty slow.
+            # User can specific requested_model_name to the latest model name,
+            # then model will be cached, this is a kind of workaround to
+            # refresh latest project model.
+            # BTW if refresh function is wanted, maybe add implement code to
+            # `_latest_project_model()` is a good choice.
+
+            logger.debug("No model specified. Using default")
+            return self._latest_project_model()
+
+        elif requested_model_name in self._models:  # model exists in cache
+            return requested_model_name
+
+        else:  # model not exists in model list cache
+            # refresh model list from local and cloud
+            # NOTE: if a malicious user sent lots of requests
+            # with not existing model will cause performance issue.
+            self._search_for_models()
+
+            if requested_model_name in self._models:  # if model exists now
+                return requested_model_name
+            else:
+                # although requested model is invalid, still return latest model as fallback
+                logger.warn("Invalid model requested. Using default")
+                return self._latest_project_model()
+
+    def parse(self, text, time=None, requested_model_name=None):
         self._begin_read()
 
-        # Lazy model loading
-        if not model_name or model_name not in self._models:
-            model_name = self._latest_project_model()
-            if model_name not in self._models:
-                logger.warn("Invalid model requested. Using default")
-            else:
-                logger.debug("No model specified. Using default")
+        model_name = self._dynamic_load_model(requested_model_name)
 
         self._loader_lock.acquire()
         try:
