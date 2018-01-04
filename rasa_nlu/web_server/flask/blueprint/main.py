@@ -10,8 +10,7 @@ from functools import wraps
 import simplejson
 from flask import Response, Blueprint, request, current_app
 
-from rasa_nlu.flask_data_router import InvalidProjectError, \
-    AlreadyTrainingError
+from rasa_nlu.web_server.flask.blueprint.data_router import InvalidProjectError, AlreadyTrainingError
 from rasa_nlu.train import TrainingException
 from rasa_nlu.version import __version__
 from rasa_nlu.web_server import functions
@@ -99,9 +98,11 @@ def parse_get():
         resp = Response()
         resp.headers['Access-Control-Allow-Origin'] = '*'
 
+        data = server.data_router.extract(request_params)
+
         try:
             resp.status_code = 200
-            response_data = functions.parse(server, request_params)
+            response_data = server.data_router.parse(data)
             resp.response = simplejson.dumps(response_data)
             return resp
         except InvalidProjectError as e:
@@ -156,7 +157,6 @@ def status():
 @requires_auth
 @check_cors
 def train():
-    # FIXME: this function not work under zeus_core but work under plain flask
     data_string = request.data.decode('utf-8', 'strict')
     kwargs = {key: value for key, value in request.args.items()}
 
