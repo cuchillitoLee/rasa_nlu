@@ -30,12 +30,15 @@ def get_persistor(config):
                        "are {}".format(", ".join(['aws', 'gcs'])))
 
     if config['storage'] == 'aws':
-        return AWSPersistor(config['aws_region'], config['bucket_name'],
-                            config['aws_endpoint_url'])
+        return AWSPersistor(config.get('aws_region'), config['bucket_name'],
+                            config['aws_endpoint_url'],
+                            config.get('aws_access_key_id'),
+                            config.get('aws_secret_access_key')
+                            )
     elif config['storage'] == 'gcs':
         return GCSPersistor(config['bucket_name'])
-    elif config['storage'] == 's3':
-        return S3Persistor(config['s3_master'], config['s3_slave'])
+    elif config['storage'] == 'mutilwrite_s3':
+        return MutilwriteS3Persistor(config['mutilwrite_s3_master'], config['mutilwrite_s3_slave'])
     else:
         return None
 
@@ -43,8 +46,8 @@ def get_persistor(config):
 class Persistor(object):
     """Store models in cloud and fetch them when needed"""
 
-    def persist(self, mode_directory, model_name, project):
-        # type: (Text) -> None
+    def persist(self, mode_directory, model_name, project, remove_tar_file=True):
+        # type: (Text) -> tuple([Text, Text])
         """Uploads a model persisted in the `target_dir` to cloud storage."""
 
         if not os.path.isdir(mode_directory):
@@ -54,7 +57,13 @@ class Persistor(object):
         file_key, tar_path = self._compress(mode_directory, model_name, project)
         self._persist_tar(file_key, tar_path)
 
-    def retrieve(self, model_name, project, target_path):
+        # clean up if asked
+        if remove_tar_file:
+            self._remove_tar_file(tar_path)
+
+        return file_key, tar_path
+
+    def retrieve(self, model_name, project, target_path, remove_tar_file=True):
         # type: (Text) -> None
         """Downloads a model that has been persisted to cloud storage."""
 
@@ -62,6 +71,10 @@ class Persistor(object):
 
         self._retrieve_tar(tar_name)
         self._decompress(tar_name, target_path)
+
+        # clean up if asked
+        if remove_tar_file:
+            self._remove_tar_file(tar_name)
 
     def list_models(self, project):
         # type: (Text) -> List[Text]
@@ -130,20 +143,28 @@ class Persistor(object):
         with tarfile.open(compressed_path, "r:gz") as tar:
             tar.extractall(target_path)  # project dir will be created if it not exists
 
+    @staticmethod
+    def _remove_tar_file(tar_file):
+        # type: (Text) -> None
+        """Remove tar file which now is useless from disk"""
+        os.remove(tar_file)
+
 
 class AWSPersistor(Persistor):
     """Store models on S3.
 
     Fetches them when needed, instead of storing them on the local disk."""
 
-    def __init__(self, aws_region, bucket_name, endpoint_url):
+    def __init__(self, aws_region, bucket_name, endpoint_url, access_key_id=None, secret_access_key=None):
         # type: (Text, Text, Text) -> None
 
         super(AWSPersistor, self).__init__()
         self.s3 = boto3.resource('s3',
                                  region_name=aws_region,
-
-                                 endpoint_url=endpoint_url)
+                                 endpoint_url=endpoint_url,
+                                 aws_access_key_id=access_key_id,
+                                 aws_secret_access_key=secret_access_key
+                                 )
         self._ensure_bucket_exists(bucket_name, aws_region)
         self.bucket_name = bucket_name
         self.bucket = self.s3.Bucket(bucket_name)
@@ -258,7 +279,7 @@ class GCSPersistor(Persistor):
         blob.download_to_filename(target_filename)
 
 
-class S3Persistor(Persistor):
+class MutilwriteS3Persistor(Persistor):
     """Store models on S3.
 
     Fetches them when needed, instead of storing them on the local disk."""
@@ -266,9 +287,9 @@ class S3Persistor(Persistor):
     def __init__(self, master, slaves):
         # type: (dict, List(dict)) -> None
 
-        super(S3Persistor, self).__init__()
+        super(MutilwriteS3Persistor, self).__init__()
 
-        # monkey-patched AWSPersistor
+        # monkey-patched AWSPersistor: add `rollback` method
         setattr(AWSPersistor, 'rollback', self._rollback)
 
         self.master_node = AWSPersistor(**master)
@@ -285,17 +306,40 @@ class S3Persistor(Persistor):
     def persist(self, *args, **kwargs):
         persisted_nodes = []
         try:
-            self.master_node.persist(*args, **kwargs)
+            master_kwargs = kwargs.copy()
+            master_kwargs["remove_tar_file"] = False
+
+            logger.warning("Start to execute master persistor")
+
+            file_key, tar_path = self.master_node.persist(*args, **master_kwargs)
+
+            logger.warning("execute master persistor sucess")
+
             persisted_nodes.append(self.master_node)
 
             for node in self.salve_nodes:
-                node.persist(*args, **kwargs)
+                logger.warning("Start to execute salve persistor node: {}".format(node))
+
+                node._persist_tar(file_key, tar_path)
+
+                logger.warning("execute salve persistor node sucess: {}".format(node))
+
                 persisted_nodes.append(self.master_node)
+
+            self.master_node._remove_tar_file(tar_path)
+
         except Exception as e:
             # something wrong, rollback all the operation
             try:
+                logger.warning("Start to rollback persistor")
+
                 for node in persisted_nodes:
+
+                    logger.warning("rollback {} start".format(node))
+
                     node.rollback(*args, **kwargs)
+
+                    logger.warning("rollback {} successed".format(node))
                 raise e
             except Exception as e:
                 raise e
