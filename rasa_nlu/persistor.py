@@ -8,9 +8,11 @@ import logging
 import os
 import shutil
 import tarfile
+import math
 
 import boto3
 import botocore
+from filechunkio import FileChunkIO
 from builtins import object
 from rasa_nlu.config import RasaNLUConfig
 from typing import Optional, Tuple, List
@@ -150,6 +152,57 @@ class Persistor(object):
         os.remove(tar_file)
 
 
+def ceil_div(a, b):
+    """ceil division of a / b"""
+    # NOTE: all credit belongs to https://stackoverflow.com/questions/14822184/is-there-a-ceiling-equivalent-of-operator-in-python
+    return (a + (b - 1)) // b
+
+
+def chunk_yielder(element_number, max_chunk_size):
+    slice_start = None
+    slice_end = None
+    while True:
+        if slice_end == element_number:
+            # is time to stop
+            break
+
+        if slice_start is None:  # for first time
+            slice_start = 0
+            slice_end = min(max_chunk_size, element_number)
+        else:
+            slice_start = slice_end
+            slice_end = min(slice_end + max_chunk_size, element_number)
+
+        yield slice_start, slice_end
+
+
+def s3_file_uploader(service_client, bucket_name, file_key, file_path, chunk_size=None):
+    if chunk_size is None:
+        # default chunk size is 50M
+        chunk_size = 50 * 1024 * 1024
+
+    file_size = os.stat(file_path).st_size
+
+    if file_size <= chunk_size:
+        # small file, upload directly
+
+        with open(file_path, 'rb') as fd:
+            service_client.Object(bucket_name, file_key).put(Body=fd)
+
+        # return to caller
+        return None
+
+    multipart_instance = service_client.initiate_multipart_upload(file_key)
+    part_index = 1
+    for start, end in chunk_yielder(file_size, chunk_size):
+        bytes_length = end - start
+        with FileChunkIO(file_path, 'r', offset=start, bytes=bytes_length) as fp:
+            multipart_instance.upload_part_from_file(fp, part_num=part_index)
+        part_index += 1
+
+    multipart_instance.complete_upload()
+
+
 class AWSPersistor(Persistor):
     """Store models on S3.
 
@@ -202,8 +255,9 @@ class AWSPersistor(Persistor):
         # type: (Text, Text) -> None
         """Uploads a model persisted in the `target_dir` to s3."""
 
-        with open(tar_path, 'rb') as f:
-            self.s3.Object(self.bucket_name, file_key).put(Body=f)
+        # with open(tar_path, 'rb') as f:
+        #     self.s3.Object(self.bucket_name, file_key).put(Body=f)
+        s3_file_uploader(self.s3, self.bucket_name, file_key, tar_path)
 
     def _retrieve_tar(self, target_filename):
         # type: (Text) -> None
