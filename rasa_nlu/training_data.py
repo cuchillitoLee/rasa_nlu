@@ -31,8 +31,9 @@ from typing import List
 from typing import Optional
 from typing import Text
 
-from rasa_nlu.utils import lazyproperty, ordered
+from rasa_nlu.utils import lazyproperty, ordered, write_to_file
 from rasa_nlu.utils import list_to_str
+from rasa_nlu.utils import json_to_string
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,7 @@ class TrainingData(object):
         formatted_examples = [example.as_dict()
                               for example in self.training_examples]
 
-        return str(json.dumps({
+        return str(json_to_string({
             "rasa_nlu_data": {
                 "common_examples": formatted_examples,
                 "regex_features": self.regex_features,
@@ -173,8 +174,7 @@ class TrainingData(object):
         information to load it again."""
 
         data_file = os.path.join(dir_name, "training_data.json")
-        with io.open(data_file, 'w') as f:
-            f.write(self.as_json(indent=2))
+        write_to_file(data_file, self.as_json(indent=2))
 
         return {
             "training_data": "training_data.json"
