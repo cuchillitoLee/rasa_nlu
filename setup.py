@@ -27,6 +27,7 @@ install_requires = [
     "matplotlib",
     "numpy>=1.13",
     "simplejson",
+    "filechunkio",
 ]
 
 extras_requires = {
@@ -36,7 +37,7 @@ extras_requires = {
 }
 
 setup(
-    name='rasa_nlu',
+    name='rasa_nlu_enhanced',
     packages=[
         'rasa_nlu',
         'rasa_nlu.utils',
