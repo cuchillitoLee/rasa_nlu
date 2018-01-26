@@ -181,26 +181,11 @@ def s3_file_uploader(service_client, bucket_name, file_key, file_path, chunk_siz
         # default chunk size is 50M
         chunk_size = 50 * 1024 * 1024
 
-    file_size = os.stat(file_path).st_size
-
-    if file_size <= chunk_size:
-        # small file, upload directly
-
-        with open(file_path, 'rb') as fd:
-            service_client.Object(bucket_name, file_key).put(Body=fd)
-
-        # return to caller
-        return None
-
-    multipart_instance = service_client.initiate_multipart_upload(file_key)
-    part_index = 1
-    for start, end in chunk_yielder(file_size, chunk_size):
-        bytes_length = end - start
-        with FileChunkIO(file_path, 'r', offset=start, bytes=bytes_length) as fp:
-            multipart_instance.upload_part_from_file(fp, part_num=part_index)
-        part_index += 1
-
-    multipart_instance.complete_upload()
+    uploader_config = boto3.s3.transfer.TransferConfig(multipart_chunksize=chunk_size)
+    service_client.meta.client.upload_file(
+        file_path, bucket_name, file_key,
+        Config=uploader_config
+    )
 
 
 class AWSPersistor(Persistor):
