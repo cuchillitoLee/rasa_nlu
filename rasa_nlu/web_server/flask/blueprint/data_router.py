@@ -68,7 +68,8 @@ class DataRouter(object):
     def __init__(self, config, component_builder):
         self._training_processes = config['max_training_processes'] if config['max_training_processes'] > 0 else 1
         self.config = config
-        self.responses = self._create_query_logger(config)
+        # self.responses = self._create_query_logger(config)
+        self.responses = False  # disable local file logger
         self.model_dir = config['path']
         self.token = config['token']
         self.emulator = self._create_emulator()
