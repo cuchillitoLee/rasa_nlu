@@ -8,11 +8,10 @@ import logging
 import os
 import shutil
 import tarfile
-import math
+import threading
 
 import boto3
 import botocore
-from filechunkio import FileChunkIO
 from builtins import object
 from rasa_nlu.config import RasaNLUConfig
 from typing import Optional, Tuple, List
@@ -102,7 +101,7 @@ class Persistor(object):
 
         raise NotImplementedError("")
 
-    def _compress(self, model_directory, model_name, project):
+    def _compress(self, model_directory, model_name, project, **kwargs):
         # type: (Text) -> Tuple[Text, Text]
         """Creates a compressed archive and returns key and tar."""
 
@@ -152,38 +151,33 @@ class Persistor(object):
         os.remove(tar_file)
 
 
-def ceil_div(a, b):
-    """ceil division of a / b"""
-    # NOTE: all credit belongs to https://stackoverflow.com/questions/14822184/is-there-a-ceiling-equivalent-of-operator-in-python
-    return (a + (b - 1)) // b
+def s3_file_uploader(bucket_object, file_key, file_path, chunk_size=None):
+    class ProgressPercentage(object):
+        def __init__(self, filename):
+            self._filename = filename
+            self._size = float(os.path.getsize(filename))
+            self._seen_so_far = 0
+            self._lock = threading.Lock()
 
+        def __call__(self, bytes_amount):
+            # To simplify we'll assume this is hooked up
+            # to a single filename.
+            with self._lock:
+                self._seen_so_far += bytes_amount
+                percentage = (self._seen_so_far / self._size) * 100
+                logger.info(
+                    "\r%s  %s / %s  (%.2f%%)" % (
+                        self._filename, self._seen_so_far, self._size,
+                        percentage))
 
-def chunk_yielder(element_number, max_chunk_size):
-    slice_start = None
-    slice_end = None
-    while True:
-        if slice_end == element_number:
-            # is time to stop
-            break
-
-        if slice_start is None:  # for first time
-            slice_start = 0
-            slice_end = min(max_chunk_size, element_number)
-        else:
-            slice_start = slice_end
-            slice_end = min(slice_end + max_chunk_size, element_number)
-
-        yield slice_start, slice_end
-
-
-def s3_file_uploader(service_client, bucket_name, file_key, file_path, chunk_size=None):
     if chunk_size is None:
         # default chunk size is 50M
         chunk_size = 50 * 1024 * 1024
 
     uploader_config = boto3.s3.transfer.TransferConfig(multipart_chunksize=chunk_size)
-    service_client.meta.client.upload_file(
-        file_path, bucket_name, file_key,
+    bucket_object.upload_file(
+        file_path, file_key,
+        Callback=ProgressPercentage(file_path),
         Config=uploader_config
     )
 
@@ -242,7 +236,7 @@ class AWSPersistor(Persistor):
 
         # with open(tar_path, 'rb') as f:
         #     self.s3.Object(self.bucket_name, file_key).put(Body=f)
-        s3_file_uploader(self.s3, self.bucket_name, file_key, tar_path)
+        s3_file_uploader(self.bucket, file_key, tar_path)
 
     def _retrieve_tar(self, target_filename):
         # type: (Text) -> None
@@ -250,6 +244,18 @@ class AWSPersistor(Persistor):
 
         with io.open(target_filename, 'wb') as f:
             self.bucket.download_fileobj(target_filename, f)
+
+    def rollback(self, mode_directory, model_name, project):
+        if not os.path.isdir(mode_directory):
+            raise ValueError("Target directory '{}' not found.".format(mode_directory))
+
+        file_key, _ = self._compress(mode_directory, model_name, project, dry_run=True)
+
+        # remove local model
+        shutil.rmtree(mode_directory, ignore_errors=True)
+
+        # remove remote model
+        self.s3.Object(self.bucket_name, file_key).delete()
 
 
 class GCSPersistor(Persistor):
@@ -329,7 +335,7 @@ class MutilwriteS3Persistor(Persistor):
         super(MutilwriteS3Persistor, self).__init__()
 
         # monkey-patched AWSPersistor: add `rollback` method
-        setattr(AWSPersistor, 'rollback', self._rollback)
+        # setattr(AWSPersistor, 'rollback', self._rollback)
 
         self.master_node = AWSPersistor(**master)
         self.salve_nodes = [AWSPersistor(**i) for i in slaves]
@@ -348,22 +354,22 @@ class MutilwriteS3Persistor(Persistor):
             master_kwargs = kwargs.copy()
             master_kwargs["remove_tar_file"] = False
 
-            logger.warning("Start to execute master persistor")
+            logger.info("Start to execute master persistor")
 
             file_key, tar_path = self.master_node.persist(*args, **master_kwargs)
 
-            logger.warning("execute master persistor sucess")
+            logger.info("execute master persistor sucess")
 
             persisted_nodes.append(self.master_node)
 
-            for node in self.salve_nodes:
-                logger.warning("Start to execute salve persistor node: {}".format(node))
+            for salve_node in self.salve_nodes:
+                logger.info("Start to execute salve persistor node: {}".format(salve_node))
 
-                node._persist_tar(file_key, tar_path)
+                salve_node._persist_tar(file_key, tar_path)
 
-                logger.warning("execute salve persistor node sucess: {}".format(node))
+                logger.info("execute salve persistor node sucess: {}".format(salve_node))
 
-                persisted_nodes.append(self.master_node)
+                persisted_nodes.append(salve_node)
 
             self.master_node._remove_tar_file(tar_path)
 
@@ -379,25 +385,10 @@ class MutilwriteS3Persistor(Persistor):
                     node.rollback(*args, **kwargs)
 
                     logger.warning("rollback {} successed".format(node))
-                raise e
             except Exception as e:
-                raise e
+                raise
 
-    @staticmethod
-    def _rollback(self, mode_directory, model_name, project):
-        if not os.path.isdir(mode_directory):
-            raise ValueError("Target directory '{}' not found.".format(mode_directory))
-
-        file_key, _ = self._compress(mode_directory, model_name, project, dry_run=True)
-
-        # remove local model
-        shutil.rmtree(mode_directory, ignore_errors=True)
-
-        # remove remote model
-        self.s3.Object(self.bucket_name, file_key).delete()
-
-    @staticmethod
-    def _compress(self, model_directory, model_name, project, dry_run=0):
+    def _compress(self, model_directory, model_name, project, dry_run=False):
         # type: (Text) -> Tuple[Text, Text]
         """Creates a compressed archive and returns key and tar."""
 
