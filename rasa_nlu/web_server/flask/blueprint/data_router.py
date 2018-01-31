@@ -4,6 +4,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import datetime
+import glob
 import io
 import logging
 import os
@@ -110,14 +111,30 @@ class DataRouter(object):
             # TODO: start a pull request
             projects = [i for i in os.listdir(self.config['path']) if os.path.isdir(os.path.join(self.config['path'], i))]
 
+        cloud_provided_projects = self._list_projects_in_cloud()
+
+        projects.extend(cloud_provided_projects)
+
         project_store = {}
 
         for project in projects:
             project_store[project] = Project(self.config, self.component_builder, project)
 
         if not project_store:
-            project_store[self.DEFAULT_PROJECT_NAME] = Project()
+            project_store[RasaNLUConfig.DEFAULT_PROJECT_NAME] = Project(self.config)
         return project_store
+
+    def _list_projects_in_cloud(self):
+        try:
+            from rasa_nlu.persistor import get_persistor
+            p = get_persistor(self.config)
+            if p is not None:
+                return p.list_projects()
+            else:
+                return []
+        except Exception as e:
+            logger.warning("Failed to list projects. {}".format(e))
+            return []
 
     def _create_emulator(self):
         """Sets which NLU webservice to emulate among those supported by Rasa"""
@@ -132,9 +149,9 @@ class DataRouter(object):
         elif mode.lower() == 'luis':
             from rasa_nlu.emulators.luis import LUISEmulator
             return LUISEmulator()
-        elif mode.lower() == 'api':
-            from rasa_nlu.emulators.api import ApiEmulator
-            return ApiEmulator()
+        elif mode.lower() == 'dialogflow':
+            from rasa_nlu.emulators.dialogflow import DialogflowEmulator
+            return DialogflowEmulator()
         else:
             raise ValueError("unknown mode : {0}".format(mode))
 
@@ -142,11 +159,20 @@ class DataRouter(object):
         return self.emulator.normalise_request_json(data)
 
     def parse(self, data):
-        project = data.get("project") or self.DEFAULT_PROJECT_NAME
+        logger.info("Data: {}".format(data))
+
+        project = data.get("project") or RasaNLUConfig.DEFAULT_PROJECT_NAME
         model = data.get("model")
 
         if project not in self.project_store:
-            projects = os.listdir(self.config['path'])
+            projects = self._list_projects(self.config['path'])
+            logger.info("projects: {}".format(projects))
+
+            cloud_provided_projects = self._list_projects_in_cloud()
+            logger.info("cloud_provided_projects: {}".format(cloud_provided_projects))
+
+            projects.extend(cloud_provided_projects)
+
             if project not in projects:
                 raise InvalidProjectError("No project found with name '{}'.".format(project))
             else:
@@ -158,8 +184,15 @@ class DataRouter(object):
         response, used_model = self.project_store[project].parse(data['text'], data.get('time', None), model)
 
         if self.responses:
-            self.responses.info(user_input=response, project=project, model=used_model)
+            self.responses.info('', user_input=response, project=project, model=used_model)
         return self.format_response(response)
+
+    @staticmethod
+    def _list_projects(path):
+        """List the projects in the path, ignoring hidden directories."""
+        return [fn
+                for fn in glob.glob(os.path.join(path, '*'))
+                if os.path.isdir(fn)]
 
     def format_response(self, data):
         return self.emulator.normalise_response_json(data)
@@ -208,7 +241,7 @@ class DataRouter(object):
             return model_dir
 
         def training_errback(failure):
-            target_project = self.project_store.get(failure.failed_target_project)
+            target_project = self.project_store.get(failure.value.failed_target_project)
             if target_project:
                 target_project.status = 0
             return failure

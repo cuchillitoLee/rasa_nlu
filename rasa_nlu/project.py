@@ -92,6 +92,8 @@ class Project(object):
 
         model_name = self._dynamic_load_model(requested_model_name)
 
+        logger.info("model_name: {}".format(model_name))
+
         self._loader_lock.acquire()
         try:
             if not self._models.get(model_name):
@@ -196,6 +198,7 @@ class Project(object):
         except Exception as e:
             logger.warn("Using default interpreter, couldn't fetch "
                         "model: {}".format(e))
+            raise  # re-raise this exception because nothing we can do now
 
     @staticmethod
     def _default_model_metadata():

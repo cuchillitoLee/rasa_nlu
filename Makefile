@@ -27,3 +27,7 @@ test: clean
 
 livedocs:
 	cd docs && make livehtml
+
+.PHONY: upload_package
+upload_package:
+	devpi upload -v --no-vcs --formats bdist_wheel,sdist -vvv

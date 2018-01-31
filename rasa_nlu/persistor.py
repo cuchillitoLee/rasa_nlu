@@ -399,3 +399,7 @@ class MutilwriteS3Persistor(Persistor):
                                        dry_run=dry_run)
         file_key = os.path.basename(tar_name)
         return file_key, tar_name
+
+    def _retrieve_tar(self, filename):
+        return self.master_node._retrieve_tar(filename)
+

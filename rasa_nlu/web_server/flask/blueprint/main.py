@@ -107,13 +107,13 @@ def parse_get():
             return resp
         except InvalidProjectError as e:
             resp.status_code = 404
-            resp.response = simplejson.dumps({"error": "{}".format(e)})
+            resp.response = simplejson.dumps({"error": "{}".format(traceback.format_exc())})
             return resp
         except Exception as e:
             traceback.print_exc()
             print(e)
             resp.status_code = 500
-            resp.response = simplejson.dumps({"error": "{}".format(e)})
+            resp.response = simplejson.dumps({"error": "{}".format(traceback.format_exc())})
             return resp
 
 

@@ -48,7 +48,9 @@ setup(
         'rasa_nlu.tokenizers',
         'rasa_nlu.web_server',
         'rasa_nlu.web_server.flask',
-        'rasa_nlu.web_server.flask.blueprint'
+        'rasa_nlu.web_server.flask.blueprint',
+        'rasa_nlu.worker',
+        'rasa_nlu.worker.training',
     ],
     classifiers=[
         "Programming Language :: Python :: 2.7",
