@@ -51,6 +51,7 @@ setup(
         'rasa_nlu.web_server.flask.blueprint',
         'rasa_nlu.worker',
         'rasa_nlu.worker.training',
+        'rasa_nlu.worker.parsing',
     ],
     classifiers=[
         "Programming Language :: Python :: 2.7",
