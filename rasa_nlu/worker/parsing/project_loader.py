@@ -3,11 +3,10 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import glob
 import logging
 import os
 import traceback
-
-from builtins import object
 
 from rasa_nlu.components import ComponentBuilder
 from rasa_nlu.config import RasaNLUConfig
@@ -44,6 +43,13 @@ class ProjectLoader(object):
         if not project_store:
             project_store[RasaNLUConfig.DEFAULT_PROJECT_NAME] = Project(self.config)
         return project_store
+
+    @staticmethod
+    def _list_projects(path):
+        """List the projects in the path, ignoring hidden directories."""
+        return [os.path.basename(fn)
+                for fn in glob.glob(os.path.join(path, '*'))
+                if os.path.isdir(fn)]
 
     def _list_projects_in_cloud(self):
         try:
