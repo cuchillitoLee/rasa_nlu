@@ -7,6 +7,7 @@ import logging
 import os
 from collections import defaultdict
 
+import datetime
 import typing
 from builtins import object
 import inspect
@@ -329,3 +330,30 @@ class ComponentBuilder(object):
             return component
         except MissingArgumentError as e:  # pragma: no cover
             raise Exception("Failed to create component '{}'. {}".format(component_name, e))
+
+
+def time_function_call(obj, func):
+    def wrapper(message, *args, **kwargs):
+        _start_time = datetime.datetime.now()
+
+        result = func(message, *args, **kwargs)
+
+        _end_time = datetime.datetime.now()
+
+        process_duration = _end_time - _start_time
+
+        message.set('debug', message.get('debug') or {}, True)
+        debug_info = message.get('debug')
+        debug_info[obj.__class__.__name__] = "{} ms".format(process_duration.microseconds)
+
+        return result
+
+    return wrapper
+
+
+class ComponentBuilderWithDebugHelper(ComponentBuilder):
+    def load_component(self, *args, **kwargs):
+        component = super(ComponentBuilderWithDebugHelper, self).load_component(*args, **kwargs)
+        component.process = time_function_call(component, component.process)
+
+        return component

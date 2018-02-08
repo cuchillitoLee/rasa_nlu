@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 class ProjectLoader(object):
     DEFAULT_PROJECT_NAME = "default"
 
-    def __init__(self, config):
+    def __init__(self, config, component_builder=None):
         self.config = config
-        self.component_builder = ComponentBuilder(use_cache=True)
+        self.component_builder = component_builder or ComponentBuilder(use_cache=True)
         self.project_store = self._create_project_store()
 
     def _create_project_store(self):
