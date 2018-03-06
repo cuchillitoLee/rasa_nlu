@@ -4,6 +4,8 @@ from __future__ import division
 from __future__ import absolute_import
 
 import logging
+
+import datetime
 import typing
 from builtins import zip
 import os
@@ -32,6 +34,23 @@ MAX_CV_FOLDS = 5
 if typing.TYPE_CHECKING:
     import sklearn
     import numpy as np
+
+
+def log_timing(func):
+    def wrapper(*args, **kwargs):
+        _start_time = datetime.datetime.now()
+
+        result = func(*args, **kwargs)
+
+        _end_time = datetime.datetime.now()
+
+        duration = _end_time - _start_time
+
+        logger.info("{} cost {} ms".format(func.__name__, duration.microseconds))
+
+        return result
+
+    return wrapper
 
 
 class SklearnIntentClassifier(Component):
@@ -133,6 +152,7 @@ class SklearnIntentClassifier(Component):
         message.set("intent", intent, add_to_output=True)
         message.set("intent_ranking", intent_ranking, add_to_output=True)
 
+    @log_timing
     def predict_prob(self, X):
         # type: (np.ndarray) -> np.ndarray
         """Given a bow vector of an input text, predict the intent label. Returns probabilities for all labels.
@@ -142,6 +162,7 @@ class SklearnIntentClassifier(Component):
 
         return self.clf.predict_proba(X)
 
+    @log_timing
     def predict(self, X):
         # type: (np.ndarray) -> Tuple[np.ndarray, np.ndarray]
         """Given a bow vector of an input text, predict most probable label. Returns only the most likely label.
