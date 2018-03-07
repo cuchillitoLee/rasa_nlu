@@ -6,6 +6,7 @@ from __future__ import absolute_import
 import argparse
 import logging
 import os
+import six
 from functools import wraps
 
 import simplejson
@@ -20,6 +21,7 @@ from rasa_nlu.data_router import DataRouter, InvalidProjectError, \
     AlreadyTrainingError
 from rasa_nlu.train import TrainingException
 from rasa_nlu.version import __version__
+from rasa_nlu.utils import json_to_string
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ def create_argparser():
                              "also be passed via a (json-formatted) config "
                              "file. NB command line args take precedence")
     parser.add_argument('-e', '--emulate',
-                        choices=['wit', 'luis', 'api'],
+                        choices=['wit', 'luis', 'dialogflow'],
                         help='which service to emulate (default: None i.e. use '
                              'simple built in format)')
     parser.add_argument('-l', '--language',
@@ -74,7 +76,10 @@ def check_cors(f):
                 request.setResponseCode(403)
                 return 'forbidden'
 
-        return f(*args, **kwargs)
+        if request.method.decode('utf-8', 'strict') == 'OPTIONS':
+            return ''  # if this is an options call we skip running `f`
+        else:
+            return f(*args, **kwargs)
 
     return decorated
 
@@ -86,9 +91,11 @@ def requires_auth(f):
     def decorated(*args, **kwargs):
         self = args[0]
         request = args[1]
-        token = str(request.args.get('token', [''])[0])
-
-        if self.data_router.token is None or token == self.data_router.token:
+        if six.PY3:
+            token = request.args.get(b'token', [b''])[0].decode("utf8")
+        else:
+            token = str(request.args.get('token', [''])[0])
+        if self.config['token'] is None or token == self.config['token']:
             return f(*args, **kwargs)
         request.setResponseCode(401)
         return 'unauthorized'
@@ -116,13 +123,13 @@ class RasaNLU(object):
     def _create_data_router(self, config, component_builder):
         return DataRouter(config, component_builder)
 
-    @app.route("/", methods=['GET'])
+    @app.route("/", methods=['GET', 'OPTIONS'])
     @check_cors
     def hello(self, request):
         """Main Rasa route to check if the server is online"""
         return "hello from Rasa NLU: " + __version__
 
-    @app.route("/parse", methods=['GET', 'POST'])
+    @app.route("/parse", methods=['GET', 'POST', 'OPTIONS'])
     @requires_auth
     @check_cors
     @inlineCallbacks
@@ -140,8 +147,7 @@ class RasaNLU(object):
 
         if 'q' not in request_params:
             request.setResponseCode(404)
-            dumped = simplejson.dumps({
-                "error": "Invalid parse parameter specified"})
+            dumped = json_to_string({"error": "Invalid parse parameter specified"})
             returnValue(dumped)
         else:
             data = self.data_router.extract(request_params)
@@ -149,40 +155,41 @@ class RasaNLU(object):
                 request.setResponseCode(200)
                 response = yield (self.data_router.parse(data) if self._testing
                                   else threads.deferToThread(self.data_router.parse, data))
-                returnValue(simplejson.dumps(response))
+                returnValue(json_to_string(response))
             except InvalidProjectError as e:
                 request.setResponseCode(404)
-                returnValue(simplejson.dumps({"error": "{}".format(e)}))
+                returnValue(json_to_string({"error": "{}".format(e)}))
             except Exception as e:
                 request.setResponseCode(500)
-                returnValue(simplejson.dumps({"error": "{}".format(e)}))
+                logger.exception(e)
+                returnValue(json_to_string({"error": "{}".format(e)}))
 
-    @app.route("/version", methods=['GET'])
+    @app.route("/version", methods=['GET', 'OPTIONS'])
     @requires_auth
     @check_cors
     def version(self, request):
         """Returns the Rasa server's version"""
 
         request.setHeader('Content-Type', 'application/json')
-        return simplejson.dumps({'version': __version__})
+        return json_to_string({'version': __version__})
 
-    @app.route("/config", methods=['GET'])
+    @app.route("/config", methods=['GET', 'OPTIONS'])
     @requires_auth
     @check_cors
     def rasaconfig(self, request):
         """Returns the in-memory configuration of the Rasa server"""
 
         request.setHeader('Content-Type', 'application/json')
-        return simplejson.dumps(self.config.as_dict())
+        return json_to_string(self.config.as_dict())
 
-    @app.route("/status", methods=['GET'])
+    @app.route("/status", methods=['GET', 'OPTIONS'])
     @requires_auth
     @check_cors
     def status(self, request):
         request.setHeader('Content-Type', 'application/json')
-        return simplejson.dumps(self.data_router.get_status())
+        return json_to_string(self.data_router.get_status())
 
-    @app.route("/train", methods=['POST'])
+    @app.route("/train", methods=['POST', 'OPTIONS'])
     @requires_auth
     @check_cors
     @inlineCallbacks
@@ -196,20 +203,38 @@ class RasaNLU(object):
             request.setResponseCode(200)
             response = yield self.data_router.start_train_process(
                     data_string, kwargs)
-            returnValue(simplejson.dumps(
-                    {'info': 'new model trained: {}'.format(response)}))
+            returnValue(json_to_string({'info': 'new model trained: {}'.format(response)}))
         except AlreadyTrainingError as e:
             request.setResponseCode(403)
-            returnValue(simplejson.dumps(
-                    {"error": "{}".format(e)}))
+            returnValue(json_to_string({"error": "{}".format(e)}))
         except InvalidProjectError as e:
             request.setResponseCode(404)
-            returnValue(simplejson.dumps(
-                    {"error": "{}".format(e)}))
+            returnValue(json_to_string({"error": "{}".format(e)}))
         except TrainingException as e:
             request.setResponseCode(500)
-            returnValue(simplejson.dumps(
-                    {"error": "{}".format(e)}))
+            returnValue(json_to_string({"error": "{}".format(e)}))
+
+    @app.route("/evaluate", methods=['POST'])
+    @requires_auth
+    @check_cors
+    def evaluate(self, request):
+        data_string = request.content.read().decode('utf-8', 'strict')
+        params = {
+            key.decode('utf-8', 'strict'): value[0].decode('utf-8', 'strict')
+            for key, value in request.args.items()
+        }
+
+        request.setHeader('Content-Type', 'application/json')
+
+        try:
+            request.setResponseCode(200)
+            response = self.data_router.evaluate(data_string,
+                                                 params.get('project'),
+                                                 params.get('model'))
+            return simplejson.dumps(response)
+        except Exception as e:
+            request.setResponseCode(500)
+            return simplejson.dumps({"error": "{}".format(e)})
 
 
 if __name__ == '__main__':

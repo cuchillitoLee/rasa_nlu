@@ -3,15 +3,12 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import copy
 import datetime
-import io
-import json
 import logging
 import os
 
-import copy
 from builtins import object
-from builtins import str
 from typing import Any
 from typing import Dict
 from typing import List
@@ -19,13 +16,13 @@ from typing import Optional
 from typing import Text
 
 import rasa_nlu
-from rasa_nlu import components
+from rasa_nlu import components, utils
 from rasa_nlu.components import Component
 from rasa_nlu.components import ComponentBuilder
 from rasa_nlu.config import RasaNLUConfig
 from rasa_nlu.persistor import Persistor
 from rasa_nlu.training_data import TrainingData, Message
-from rasa_nlu.utils import create_dir
+from rasa_nlu.utils import create_dir, write_json_to_file
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +50,7 @@ class Metadata(object):
         """Loads the metadata from a models directory."""
         try:
             metadata_file = os.path.join(model_dir, 'metadata.json')
-            with io.open(metadata_file, encoding="utf-8") as f:
-                data = json.loads(f.read())
+            data = utils.read_json_file(metadata_file)
             return Metadata(data, model_dir)
         except Exception as e:
             abspath = os.path.abspath(os.path.join(model_dir, 'metadata.json'))
@@ -95,8 +91,8 @@ class Metadata(object):
             "rasa_nlu_version": rasa_nlu.__version__,
         })
 
-        with io.open(os.path.join(model_dir, 'metadata.json'), 'w') as f:
-            f.write(str(json.dumps(metadata, indent=4)))
+        filename = os.path.join(model_dir, 'metadata.json')
+        write_json_to_file(filename, metadata, indent=4)
 
 
 class Trainer(object):
@@ -171,7 +167,8 @@ class Trainer(object):
         timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
         metadata = {
             "language": self.config["language"],
-            "pipeline": [component.name for component in self.pipeline],
+            "pipeline": [utils.module_path_from_object(component)
+                         for component in self.pipeline],
         }
 
         if project_name is None:
@@ -254,7 +251,7 @@ class Interpreter(object):
         for component_name in model_metadata.pipeline:
             component = component_builder.load_component(
                     component_name, model_metadata.model_dir,
-                    model_metadata, **context)
+                    model_metadata, config=config, **context)
             try:
                 updates = component.provide_context()
                 if updates:
@@ -273,7 +270,7 @@ class Interpreter(object):
         self.context = context if context is not None else {}
         self.model_metadata = model_metadata
 
-    def parse(self, text, time=None):
+    def parse(self, text, time=None, only_output_properties=True):
         # type: (Text) -> Dict[Text, Any]
         """Parse the input text, classify it and return pipeline result.
 
@@ -294,5 +291,5 @@ class Interpreter(object):
             component.process(message, **self.context)
 
         output = self.default_output_attributes()
-        output.update(message.as_dict(only_output_properties=True))
+        output.update(message.as_dict(only_output_properties=only_output_properties))
         return output

@@ -4,6 +4,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import datetime
+import glob
 
 import os
 import logging
@@ -55,18 +56,61 @@ class Project(object):
             self._writer_lock.release()
         self._reader_lock.release()
 
-    def parse(self, text, time=None, model_name=None):
+    def _load_local_model(self, requested_model_name=None):
+        if requested_model_name is None:  # user want latest model
+            # NOTE: for better parse performance, currently although user may want
+            # latest model by set requested_model_name explicitly to None, we are
+            # not refresh model list from local and cloud which is pretty slow.
+            # User can specific requested_model_name to the latest model name,
+            # then model will be cached, this is a kind of workaround to
+            # refresh latest project model.
+            # BTW if refresh function is wanted, maybe add implement code to
+            # `_latest_project_model()` is a good choice.
+
+            logger.debug("No model specified. Using default")
+            return self._latest_project_model()
+
+        elif requested_model_name in self._models:  # model exists in cache
+            return requested_model_name
+
+        return None  # local model loading failed!
+
+    def _dynamic_load_model(self, requested_model_name=None):
+        # type: (Text) -> Text
+
+        # first try load from local cache
+        local_model = self._load_local_model(requested_model_name)
+        if local_model:
+            return local_model
+
+        # now model not exists in model list cache
+        # refresh model list from local and cloud
+
+        # NOTE: if a malicious user sent lots of requests
+        # with not existing model will cause performance issue.
+        # because get anything from cloud is a time-consuming task
+        self._search_for_models()
+
+        # retry after re-fresh model cache
+        local_model = self._load_local_model(requested_model_name)
+        if local_model:
+            return local_model
+
+        # still not found user specified model
+        logger.warn("Invalid model requested. Using default")
+        return self._latest_project_model()
+
+    def parse(self, text, time=None, requested_model_name=None):
         self._begin_read()
 
-        # Lazy model loading
-        if not model_name or model_name not in self._models:
-            model_name = self._latest_project_model()
-            logger.warn("Invalid model requested. Using default")
+        model_name = self._dynamic_load_model(requested_model_name)
 
         self._loader_lock.acquire()
-        if not self._models.get(model_name):
-            self._models[model_name] = self._interpreter_for_model(model_name)
-        self._loader_lock.release()
+        try:
+            if not self._models.get(model_name):
+                self._models[model_name] = self._interpreter_for_model(model_name)
+        finally:
+            self._loader_lock.release()
 
         response = self._models[model_name].parse(text, time)
 
@@ -124,7 +168,7 @@ class Project(object):
             data = Project._default_model_metadata()
             return Metadata(data, model_name)
         else:
-            if not os.path.isabs(model_name):
+            if not os.path.isabs(model_name) and self._path:
                 path = os.path.join(self._path, model_name)
             else:
                 path = model_name
@@ -165,6 +209,7 @@ class Project(object):
         except Exception as e:
             logger.warn("Using default interpreter, couldn't fetch "
                         "model: {}".format(e))
+            raise  # re-raise this exception because nothing we can do now
 
     @staticmethod
     def _default_model_metadata():
@@ -177,6 +222,6 @@ class Project(object):
         if not path or not os.path.isdir(path):
             return []
         else:
-            return [model
-                    for model in os.listdir(path)
-                    if model.startswith(MODEL_NAME_PREFIX)]
+            return [os.path.relpath(model, path)
+                    for model in glob.glob(os.path.join(path, '*'))
+                    if os.path.isdir(model)]

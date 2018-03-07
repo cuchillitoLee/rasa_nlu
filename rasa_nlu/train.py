@@ -13,11 +13,11 @@ from typing import Tuple
 from typing import Optional
 
 from rasa_nlu.components import ComponentBuilder
-from rasa_nlu.converters import load_data
 from rasa_nlu.model import Interpreter
 from rasa_nlu.model import Trainer
 
 from rasa_nlu.config import RasaNLUConfig
+from rasa_nlu.training_data import load_data
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,10 @@ def create_argparser():
                         help="Model and data language")
     parser.add_argument('-t', '--num_threads', default=None, type=int,
                         help="Number of threads to use during model training")
+    parser.add_argument('--fixed_model_name',
+                        help="If present, a model will always be persisted "
+                             "in the specified directory instead of creating "
+                             "a folder like 'model_20171020-160213'")
     parser.add_argument('-m', '--mitie_file', default=None,
                         help='File with mitie total_word_feature_extractor')
     return parser
@@ -92,7 +96,7 @@ def do_train_in_worker(config):
         _, _, persisted_path = do_train(config)
         return persisted_path
     except Exception as e:
-        raise TrainingException(config.get("name"), e)
+        raise TrainingException(config.get("project"), e)
 
 
 def do_train(config,  # type: RasaNLUConfig
@@ -106,7 +110,7 @@ def do_train(config,  # type: RasaNLUConfig
     # trained in another subprocess
     trainer = Trainer(config, component_builder)
     persistor = create_persistor(config)
-    training_data = load_data(config['data'])
+    training_data = load_data(config['data'], config['language'])
     interpreter = trainer.train(training_data)
     persisted_path = trainer.persist(config['path'], persistor,
                                      config['project'],

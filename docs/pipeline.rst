@@ -31,7 +31,7 @@ For example, the ``entities`` attribute is created by the ``ner_crf`` component.
 Pre-configured Pipelines
 ------------------------
 To ease the burden of coming up with your own processing pipelines, we provide a couple of ready to use templates
-which can be used by settings the ``pipeline`` configuration value to the name of the template you want to use.
+which can be used by setting the ``pipeline`` configuration value to the name of the template you want to use.
 Here is a list of the existing templates:
 
 +---------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -80,7 +80,7 @@ intent_featurizer_mitie
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 :Short: MITIE intent featurizer
-:Outputs: nothing, used used as an input to intent classifiers that need intent features (e.g. ``intent_classifier_sklearn``)
+:Outputs: nothing, used as an input to intent classifiers that need intent features (e.g. ``intent_classifier_sklearn``)
 :Description:
     Creates feature for intent classification using the MITIE featurizer.
 
@@ -94,7 +94,7 @@ intent_featurizer_spacy
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 :Short: spacy intent featurizer
-:Outputs: nothing, used used as an input to intent classifiers that need intent features (e.g. ``intent_classifier_sklearn``)
+:Outputs: nothing, used as an input to intent classifiers that need intent features (e.g. ``intent_classifier_sklearn``)
 :Description:
     Creates feature for intent classification using the spacy featurizer.
 
@@ -282,8 +282,7 @@ ner_synonyms
                         "start": 11,
                         "end": 24,
                         "entity": "city",
-                        "extractor" "ner_mitie",
-                        "processor": ["ner_synonyms"]}]
+                       }]
         },
         {
           "text": "I got a new flat in NYC.",
@@ -292,8 +291,7 @@ ner_synonyms
                         "start": 20,
                         "end": 23,
                         "entity": "city",
-                        "extractor" "ner_mitie",
-                        "processor": ["ner_synonyms"]}]
+                       }]
         }]
 
     this component will allow you to map the entities ``New York City`` and ``NYC`` to ``nyc``. The entitiy
@@ -376,4 +374,4 @@ component can retrieve these feature vectors from the context and do intent clas
 
 Initially the context is filled with all configuration values, the arrows in the image show the call order
 and visualize the path of the passed context. After all components are trained and persisted, the
-final context dictionary is used to persist the models metadata.
+final context dictionary is used to persist the model's metadata.
