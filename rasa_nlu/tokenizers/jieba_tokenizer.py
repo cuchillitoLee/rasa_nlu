@@ -20,7 +20,9 @@ class JiebaTokenizer(Tokenizer, Component):
     name = "tokenizer_jieba"
 
     provides = ["tokens"]
-    
+
+    language_list = ['zh']
+
     def __init__(self):
         pass
     
@@ -31,8 +33,6 @@ class JiebaTokenizer(Tokenizer, Component):
 
     def train(self, training_data, config, **kwargs):
         # type: (TrainingData, RasaNLUConfig, **Any) -> None
-        if config['language'] != 'zh':
-            raise Exception("tokenizer_jieba is only used for Chinese. Check your configure json file.")
         for example in training_data.training_examples:
             example.set("tokens", self.tokenize(example.text))
 
