@@ -16,7 +16,7 @@ from rasa_nlu.training_data import TrainingData
 
 
 class JiebaTokenizer(Tokenizer, Component):
-    
+
     name = "tokenizer_jieba"
 
     provides = ["tokens"]
@@ -25,7 +25,7 @@ class JiebaTokenizer(Tokenizer, Component):
 
     def __init__(self):
         pass
-    
+
     @classmethod
     def required_packages(cls):
         # type: () -> List[Text]
