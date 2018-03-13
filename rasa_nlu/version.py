@@ -3,4 +3,4 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
-__version__ = '10.12.0.dev10'
+__version__ = '10.12.0.dev11'
