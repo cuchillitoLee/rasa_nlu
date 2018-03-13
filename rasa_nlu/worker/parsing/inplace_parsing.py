@@ -7,9 +7,10 @@ class InplaceParsing(object):
         self.query_logger = query_logger
         self.config = config
 
+        self.project_loader = ProjectLoader(self.config, ComponentBuilderWithDebugHelper(use_cache=True))
+
     def parse(self, text, project, model, time=None):
-        project_loader = ProjectLoader(self.config, ComponentBuilderWithDebugHelper(use_cache=True))
-        project = project_loader.load_project(project)
+        project = self.project_loader.load_project(project)
 
         response, used_model = project.parse(text, time, model)
 
